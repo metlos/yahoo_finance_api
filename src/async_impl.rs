@@ -95,6 +95,42 @@ impl YahooConnector {
         Ok(YOptionResults::scrape(&resp))
     }
 
+    pub async fn get_income_statement(
+        &self,
+        name: &str,
+        period: fundamentals::Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::IncomeStatementFact],
+    ) -> Result<fundamentals::IncomeStatement, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url).await?;
+        fundamentals::from_response(resp, period, facts)
+    }
+
+    pub async fn get_balancesheet(
+        &self,
+        name: &str,
+        period: fundamentals::Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::BalanceSheetFact],
+    ) -> Result<fundamentals::BalanceSheet, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url).await?;
+        fundamentals::from_response(resp, period, facts)
+    }
+
+    pub async fn get_cashflow(
+        &self,
+        name: &str,
+        period: fundamentals::Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::CashflowFact],
+    ) -> Result<fundamentals::Cashflow, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url).await?;
+        fundamentals::from_response(resp, period, facts)
+    }
+
     /// Send request to yahoo! finance server and transform response to JSON value
     async fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
         let resp = self.client.get(url).send().await?;

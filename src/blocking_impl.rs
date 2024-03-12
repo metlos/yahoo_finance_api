@@ -1,3 +1,5 @@
+use self::fundamentals::{IncomeStatement, IncomeStatementFact, Period};
+
 use super::*;
 
 impl YahooConnector {
@@ -88,6 +90,42 @@ impl YahooConnector {
         let url = format!("https://finance.yahoo.com/quote/{name}/options?p={name}");
         let resp = self.client.get(url).send()?.text()?;
         Ok(YOptionResults::scrape(&resp))
+    }
+
+    pub fn get_income_statement(
+        &self,
+        name: &str,
+        period: Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::IncomeStatementFact],
+    ) -> Result<fundamentals::IncomeStatement, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url)?;
+        fundamentals::from_response(resp, period, facts)
+    }
+
+    pub fn get_balancesheet(
+        &self,
+        name: &str,
+        period: fundamentals::Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::BalanceSheetFact],
+    ) -> Result<fundamentals::BalanceSheet, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url)?;
+        fundamentals::from_response(resp, period, facts)
+    }
+
+    pub fn get_cashflow(
+        &self,
+        name: &str,
+        period: fundamentals::Period,
+        until: OffsetDateTime,
+        facts: &[fundamentals::CashflowFact],
+    ) -> Result<fundamentals::Cashflow, YahooError> {
+        let url = fundamentals::compose_fundamentals_url(name, period.clone(), until, facts);
+        let resp = self.send_request(&url)?;
+        fundamentals::from_response(resp, period, facts)
     }
 
     /// Send request to yahoo! finance server and transform response to JSON value

@@ -171,6 +171,7 @@ use reqwest::{Client, ClientBuilder};
 // re-export time crate
 pub use time;
 
+pub mod fundamentals;
 mod quote_summary;
 mod quotes;
 mod search_result;
@@ -188,6 +189,8 @@ pub use yahoo_error::YahooError;
 
 const YCHART_URL: &str = "https://query1.finance.yahoo.com/v8/finance/chart";
 const YSEARCH_URL: &str = "https://query2.finance.yahoo.com/v1/finance/search";
+const YFUNDAMENTALS_URL: &str =
+    "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries";
 
 // Macros instead of constants,
 macro_rules! YCHART_PERIOD_QUERY {
