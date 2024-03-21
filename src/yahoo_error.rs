@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum YahooError {
-    #[error("fetching the data from yahoo! finance failed")]
+    #[error("fetching the data from yahoo! finance failed: {0}")]
     FetchFailed(String),
     #[error("deserializing response from yahoo! finance failed")]
     DeserializeFailed(#[from] serde_json::Error),

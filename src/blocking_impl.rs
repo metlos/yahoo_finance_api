@@ -132,9 +132,21 @@ impl YahooConnector {
     fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
         let resp = self.client.get(url).send()?;
 
-        match resp.status() {
-            StatusCode::OK => Ok(resp.json()?),
-            status => Err(YahooError::FetchFailed(format!("{}", status))),
+        let status = resp.status();
+        let body = resp.text()?;
+        log::trace!(
+            "Yahoo URL {} response status {}, body: {}",
+            url,
+            status,
+            body
+        );
+
+        match status {
+            StatusCode::OK => Ok(serde_json::from_str(&body)?),
+            status => Err(YahooError::FetchFailed(format!(
+                "status {}, response: {}",
+                status, body
+            ))),
         }
     }
 }

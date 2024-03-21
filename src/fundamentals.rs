@@ -79,7 +79,10 @@ where
     if let Some(Value::Array(results)) = resp.get("timeseries").and_then(|v| v.get("result")) {
         let mut ret = HashMap::default();
         for res in results {
-            let dates = extract_timestamps_from_response(res)?;
+            let dates = match extract_timestamps_from_response(res) {
+                Ok(dates) => dates,
+                Err(_) => continue,
+            };
             for rf in requested_facts {
                 let key = format!("{}{:?}", requested_period.to_yquery_identifier(), rf);
                 if let Some(Value::Array(values)) = res.get(key) {
@@ -96,7 +99,9 @@ where
         }
         return Ok(ret);
     }
-    Err(YahooError::DataInconsistency)
+    Err(YahooError::FetchFailed(
+        "timeseries.result not found in the response JSON".into(),
+    ))
 }
 
 fn extract_timestamps_from_response(result_entry: &Value) -> Result<Vec<time::Date>, YahooError> {
@@ -107,15 +112,32 @@ fn extract_timestamps_from_response(result_entry: &Value) -> Result<Vec<time::Da
                 Value::Number(ts) => match ts.as_i64() {
                     Some(ts) => match time::OffsetDateTime::from_unix_timestamp(ts) {
                         Ok(ts) => dates.push(ts.date()),
-                        Err(_) => return Err(YahooError::DataInconsistency),
+                        Err(_) => {
+                            return Err(YahooError::FetchFailed(format!(
+                                "{} is not a valid unix timestamp in timeseries.result.timestamp",
+                                ts
+                            )))
+                        }
                     },
-                    None => return Err(YahooError::DataInconsistency),
+                    None => {
+                        return Err(YahooError::FetchFailed(format!(
+                            "{} cannot be parsed as an integer in timeseries.result.timestamp",
+                            ts
+                        )))
+                    }
                 },
-                _ => return Err(YahooError::DataInconsistency),
+                _ => {
+                    return Err(YahooError::FetchFailed(format!(
+                        "Expected {} to be a number",
+                        ts
+                    )))
+                }
             };
         }
     } else {
-        return Err(YahooError::DataInconsistency);
+        return Err(YahooError::FetchFailed(
+            "timeseries.result.timestamp not found in the response JSON".into(),
+        ));
     }
     Ok(dates)
 }
