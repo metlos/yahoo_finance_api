@@ -4,9 +4,9 @@ use thiserror::Error;
 pub enum YahooError {
     #[error("fetching the data from yahoo! finance failed: {0}")]
     FetchFailed(String),
-    #[error("deserializing response from yahoo! finance failed")]
+    #[error("deserializing response from yahoo! finance failed: {0}")]
     DeserializeFailed(#[from] serde_json::Error),
-    #[error("connection to yahoo! finance server failed")]
+    #[error("connection to yahoo! finance server failed: {0}")]
     ConnectionFailed(#[from] reqwest::Error),
     #[error("yahoo! finance return invalid JSON format")]
     InvalidJson,
