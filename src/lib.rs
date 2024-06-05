@@ -241,6 +241,14 @@ impl YahooConnector {
             inner: Client::builder(),
         }
     }
+
+    pub fn from_builder(bld: ClientBuilder) -> Result<Self, YahooError> {
+        Ok(Self {
+            client: bld.build()?,
+            url: YCHART_URL,
+            search_url: YSEARCH_URL,
+        })
+    }
 }
 
 impl Default for YahooConnector {
