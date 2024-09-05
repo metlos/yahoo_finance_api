@@ -68,7 +68,7 @@ pub type IncomeStatement = FundamentalsData<IncomeStatementFact>;
 pub type BalanceSheet = FundamentalsData<BalanceSheetFact>;
 pub type Cashflow = FundamentalsData<CashflowFact>;
 
-pub fn from_response<K>(
+pub(crate) fn from_response<K>(
     resp: Value,
     requested_period: Period,
     requested_facts: &[K],

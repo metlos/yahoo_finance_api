@@ -1,3 +1,5 @@
+use reqwest::{Request, Url};
+
 use self::fundamentals::{IncomeStatement, IncomeStatementFact, Period};
 
 use super::*;
@@ -128,18 +130,41 @@ impl YahooConnector {
         fundamentals::from_response(resp, period, facts)
     }
 
+    pub fn get_quote_summary(
+        &self,
+        name: &str,
+        fields: &[quote_summary::QuoteSummaryField],
+    ) -> Result<quote_summary::QuoteSummary, YahooError> {
+        let url = quote_summary::compose_url(name, fields);
+        let resp = self.send_request(&url)?;
+        println!("{}", resp);
+        quote_summary::from_response(resp)
+    }
+
     /// Send request to yahoo! finance server and transform response to JSON value
     fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
-        let resp = self.client.get(url).send()?;
+        let mut url = Url::parse(url)
+            .map_err(|e| YahooError::FetchFailed(format!("failed to parse the URL: {}", e)))?;
 
-        let status = resp.status();
-        let body = resp.text()?;
-        log::trace!(
-            "Yahoo URL {} response status {}, body: {}",
-            url,
-            status,
-            body
-        );
+        self.crumb.enrich(&mut url)?;
+
+        let (status, body) = if log::log_enabled!(log::Level::Trace) {
+            let resp = self.client.get(url.clone()).send()?;
+            let status = resp.status();
+            let body = resp.text()?;
+            log::trace!(
+                "Yahoo URL {} response status {}, body: {}",
+                url,
+                status,
+                body
+            );
+            (status, body)
+        } else {
+            let resp = self.client.get(url).send()?;
+            let status = resp.status();
+            let body = resp.text()?;
+            (status, body)
+        };
 
         match status {
             StatusCode::OK => Ok(serde_json::from_str(&body)?),
@@ -153,6 +178,8 @@ impl YahooConnector {
 
 #[cfg(test)]
 mod tests {
+    use crate::quote_summary::QuoteSummaryField;
+
     use super::*;
     use time::macros::datetime;
 
@@ -315,5 +342,35 @@ mod tests {
         assert_eq!(&response.chart.result[0].meta.data_granularity, "1d");
         let capital_gains = response.capital_gains().unwrap();
         assert!(capital_gains.len() > 0usize);
+    }
+
+    #[test]
+    fn test_quote_summary() {
+        let provider = YahooConnector::new();
+        let response = provider
+            .get_quote_summary(
+                "AAPL",
+                &[
+                    QuoteSummaryField::DefaultKeyStatistics,
+                    QuoteSummaryField::FinancialData,
+                    QuoteSummaryField::QuoteType,
+                    QuoteSummaryField::SummaryDetail,
+                    QuoteSummaryField::Earnings,
+                    QuoteSummaryField::EarningsHistory,
+                    QuoteSummaryField::EarningsTrend,
+                    QuoteSummaryField::Price,
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(response.asset_profile.is_none(), true);
+        assert_eq!(response.default_key_statistics.is_some(), true);
+        assert_eq!(response.financial_data.is_some(), true);
+        assert_eq!(response.quote_type.is_some(), true);
+        assert_eq!(response.summary_detail.is_some(), true);
+        assert_eq!(response.earnings.is_some(), true);
+        assert_eq!(response.earnings_history.is_some(), true);
+        assert_eq!(response.earnings_trend.is_some(), true);
+        assert_eq!(response.price.is_some(), true);
     }
 }

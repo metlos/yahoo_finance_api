@@ -15,9 +15,10 @@ categories = ["api-bindings"]
 include = ["src/**/*", "LICENSE-*", "README.md"]
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = [
+reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "rustls-tls",
+  "cookies",
 ] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -25,10 +26,11 @@ thiserror = "1.0"
 time = { version = "0.3", features = ["macros"] }
 select = "0.6"
 log = "0.4"
+tokio = { version = "1.39", features = ["sync"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
-tokio = { version = "1.7", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.39", features = ["macros", "rt-multi-thread", "sync"] }
 
 [features]
 blocking = ["reqwest/blocking"]

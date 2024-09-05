@@ -1,4 +1,5 @@
 use super::*;
+use reqwest::Url;
 
 impl YahooConnector {
     /// Retrieve the quotes of the last day for the given ticker
@@ -131,18 +132,41 @@ impl YahooConnector {
         fundamentals::from_response(resp, period, facts)
     }
 
+    pub async fn get_quote_summary(
+        &self,
+        name: &str,
+        fields: &[quote_summary::QuoteSummaryField],
+    ) -> Result<quote_summary::QuoteSummary, YahooError> {
+        let url = quote_summary::compose_url(name, fields);
+        let resp = self.send_request(&url).await?;
+        let ret = quote_summary::from_response(resp);
+        ret
+    }
+
     /// Send request to yahoo! finance server and transform response to JSON value
     async fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
-        let resp = self.client.get(url).send().await?;
+        let mut url = Url::parse(url)
+            .map_err(|e| YahooError::FetchFailed(format!("failed to parse the URL: {}", e)))?;
 
-        let status = resp.status();
-        let body = resp.text().await?;
-        log::trace!(
-            "Yahoo URL {} response status {}, body: {}",
-            url,
-            status,
-            body
-        );
+        self.crumb.enrich(&mut url).await?;
+
+        let (status, body) = if log::log_enabled!(log::Level::Trace) {
+            let resp = self.client.get(url.clone()).send().await?;
+            let status = resp.status();
+            let body = resp.text().await?;
+            log::trace!(
+                "Yahoo URL {} response status {}, body: {}",
+                url,
+                status,
+                body
+            );
+            (status, body)
+        } else {
+            let resp = self.client.get(url).send().await?;
+            let status = resp.status();
+            let body = resp.text().await?;
+            (status, body)
+        };
 
         match status {
             StatusCode::OK => Ok(serde_json::from_str(&body)?),

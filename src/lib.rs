@@ -159,24 +159,29 @@ fn main() {
 "
 )]
 
-use std::time::Duration;
+use crumb::Crumb;
+use std::{sync::Arc, time::Duration};
 use time::OffsetDateTime;
 
 #[cfg(feature = "blocking")]
 use reqwest::blocking::{Client, ClientBuilder};
-use reqwest::StatusCode;
+use reqwest::{
+    cookie::{CookieStore, Jar},
+    StatusCode,
+};
 #[cfg(not(feature = "blocking"))]
 use reqwest::{Client, ClientBuilder};
 
 // re-export time crate
 pub use time;
 
+mod crumb;
 pub mod fundamentals;
-mod quote_summary;
+pub mod quote_summary;
 mod quotes;
 mod search_result;
 mod yahoo_error;
-pub use quote_summary::{YQuoteResponse, YQuoteSummary};
+
 pub use quotes::{
     AdjClose, CapitalGain, Dividend, PeriodInfo, Quote, QuoteBlock, QuoteList, Split,
     TradingPeriods, YChart, YMetaData, YQuoteBlock, YResponse,
@@ -191,6 +196,8 @@ const YCHART_URL: &str = "https://query1.finance.yahoo.com/v8/finance/chart";
 const YSEARCH_URL: &str = "https://query2.finance.yahoo.com/v1/finance/search";
 const YFUNDAMENTALS_URL: &str =
     "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries";
+
+const DEFAULT_USER_AGENT_HEADER: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36";
 
 // Macros instead of constants,
 macro_rules! YCHART_PERIOD_QUERY {
@@ -217,37 +224,41 @@ macro_rules! YTICKER_QUERY {
 /// Container for connection parameters to yahoo! finance server
 pub struct YahooConnector {
     client: Client,
+    crumb: Crumb,
     url: &'static str,
     search_url: &'static str,
 }
 
 #[derive(Default)]
-pub struct YahooConnectorBuilder {
-    inner: ClientBuilder,
+pub struct YahooConnectorBuilder<CS> {
+    client_builder: Option<ClientBuilder>,
+    cookie_store: Option<Arc<CS>>,
+    user_agent: Option<String>,
+    timeout: Option<Duration>,
 }
 
 impl YahooConnector {
     /// Constructor for a new instance of the yahoo connector.
     pub fn new() -> YahooConnector {
+        let cs = Arc::new(Jar::default());
+        let client = ClientBuilder::new()
+            .user_agent(DEFAULT_USER_AGENT_HEADER)
+            .cookie_provider(cs.clone())
+            .build()
+            .unwrap();
+
+        let crumb = Crumb::new(client.clone());
+
         YahooConnector {
-            client: Client::default(),
+            client,
+            crumb,
             url: YCHART_URL,
             search_url: YSEARCH_URL,
         }
     }
 
-    pub fn builder() -> YahooConnectorBuilder {
-        YahooConnectorBuilder {
-            inner: Client::builder(),
-        }
-    }
-
-    pub fn from_builder(bld: ClientBuilder) -> Result<Self, YahooError> {
-        Ok(Self {
-            client: bld.build()?,
-            url: YCHART_URL,
-            search_url: YSEARCH_URL,
-        })
+    pub fn builder() -> YahooConnectorBuilder<Jar> {
+        YahooConnectorBuilder::default()
     }
 }
 
@@ -257,21 +268,60 @@ impl Default for YahooConnector {
     }
 }
 
-impl YahooConnectorBuilder {
+impl<CS: CookieStore + Default + 'static> YahooConnectorBuilder<CS> {
     pub fn build(self) -> Result<YahooConnector, YahooError> {
-        let builder = Client::builder();
+        let mut cb = self
+            .client_builder
+            .unwrap_or_else(|| ClientBuilder::default());
+
+        if let Some(timeout) = self.timeout {
+            cb = cb.timeout(timeout);
+        }
+
+        cb = cb.user_agent(
+            self.user_agent
+                .unwrap_or_else(|| DEFAULT_USER_AGENT_HEADER.to_string()),
+        );
+
+        if self.cookie_store.is_none() {
+            let jar = Arc::new(CS::default());
+            cb = cb.cookie_provider(jar.clone());
+        }
+
+        let cl = cb.build()?;
+
+        let crumb = Crumb::new(cl.clone());
 
         Ok(YahooConnector {
-            client: builder.build()?,
+            client: cl,
+            crumb,
             url: YCHART_URL,
             search_url: YSEARCH_URL,
         })
     }
 
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.inner = self.inner.timeout(timeout);
-
+    pub fn use_client_builder(mut self, client_builder: ClientBuilder) -> Self {
+        self.client_builder = Some(client_builder);
         self
+    }
+
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn user_agent(mut self, user_agent: &str) -> Self {
+        self.user_agent = Some(user_agent.to_string());
+        self
+    }
+
+    pub fn cookie_store<C: CookieStore + 'static>(self, cs: Arc<C>) -> YahooConnectorBuilder<C> {
+        YahooConnectorBuilder {
+            client_builder: self.client_builder,
+            cookie_store: Some(cs),
+            user_agent: self.user_agent,
+            timeout: self.timeout,
+        }
     }
 }
 
