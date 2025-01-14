@@ -177,6 +177,7 @@ pub use time;
 
 mod crumb;
 pub mod fundamentals;
+mod options;
 pub mod quote_summary;
 mod quotes;
 mod search_result;
@@ -196,6 +197,7 @@ const YCHART_URL: &str = "https://query1.finance.yahoo.com/v8/finance/chart";
 const YSEARCH_URL: &str = "https://query2.finance.yahoo.com/v1/finance/search";
 const YFUNDAMENTALS_URL: &str =
     "https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries";
+const OPTIONS_URL: &str = "https://query2.finance.yahoo.com/v7/finance/options";
 
 const DEFAULT_USER_AGENT_HEADER: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36";
 

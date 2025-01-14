@@ -137,8 +137,23 @@ impl YahooConnector {
     ) -> Result<quote_summary::QuoteSummary, YahooError> {
         let url = quote_summary::compose_url(name, fields);
         let resp = self.send_request(&url)?;
-        println!("{}", resp);
         quote_summary::from_response(resp)
+    }
+
+    pub fn get_options(&self, name: &str) -> Result<options::Options, YahooError> {
+        let url = options::compose_options_url(name);
+        let resp = self.send_request(&url)?;
+        options::options_from_response(resp)
+    }
+
+    pub fn get_option_chain(
+        &self,
+        name: &str,
+        expiration_date: OffsetDateTime,
+    ) -> Result<options::OptionChain, YahooError> {
+        let url = options::compose_option_chain_url(name, expiration_date);
+        let resp = self.send_request(&url)?;
+        options::option_chain_from_response(resp)
     }
 
     /// Send request to yahoo! finance server and transform response to JSON value

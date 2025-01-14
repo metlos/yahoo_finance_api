@@ -143,6 +143,22 @@ impl YahooConnector {
         ret
     }
 
+    pub async fn get_options(&self, name: &str) -> Result<options::Options, YahooError> {
+        let url = options::compose_options_url(name);
+        let resp = self.send_request(&url).await?;
+        options::options_from_response(resp)
+    }
+
+    pub async fn get_option_chain(
+        &self,
+        name: &str,
+        expiration_date: OffsetDateTime,
+    ) -> Result<options::OptionChain, YahooError> {
+        let url = options::compose_option_chain_url(name, expiration_date);
+        let resp = self.send_request(&url).await?;
+        options::option_chain_from_response(resp)
+    }
+
     /// Send request to yahoo! finance server and transform response to JSON value
     async fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
         let mut url = Url::parse(url)
