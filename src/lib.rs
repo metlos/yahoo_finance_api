@@ -1,176 +1,9 @@
-//! # yahoo! finance API
-//!
-//! This project provides a set of functions to receive data from the
-//! the [yahoo! finance](https://finance.yahoo.com) website via their API. This project
-//! is licensed under Apache 2.0 or MIT license (see files LICENSE-Apache2.0 and LICENSE-MIT).
-//!
-//! Since version 0.3 and the upgrade to ```reqwest``` 0.10, all requests to the yahoo API return futures, using ```async``` features.
-//! Therefore, the functions need to be called from within another ```async``` function with ```.await``` or via functions like ```block_on```.
-//! The examples are based on the ```tokio``` runtime applying the ```tokio-test``` crate.
-//!
-//! Use the `blocking` feature to get the previous behavior back: i.e. `yahoo_finance_api = {"version": "1.0", features = ["blocking"]}`.
-//!
-#![cfg_attr(
-    not(feature = "blocking"),
-    doc = "
-# Get the latest available quote:
-```rust
-use yahoo_finance_api as yahoo;
-use std::time::{Duration, UNIX_EPOCH};
-use time::OffsetDateTime;
-use tokio_test;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    // get the latest quotes in 1 minute intervals
-    let response = tokio_test::block_on(provider.get_latest_quotes(\"AAPL\", \"1d\")).unwrap();
-    // extract just the latest valid quote summery
-    // including timestamp,open,close,high,low,volume
-    let quote = response.last_quote().unwrap();
-    let time: OffsetDateTime =
-        OffsetDateTime::from(UNIX_EPOCH + Duration::from_secs(quote.timestamp));
-    println!(\"At {} quote price of Apple was {}\", time, quote.close);
-}
-```
-# Get history of quotes for given time period:
-```rust
-use yahoo_finance_api as yahoo;
-use std::time::{Duration, UNIX_EPOCH};
-use time::{macros::datetime, OffsetDateTime};
-use tokio_test;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let start = datetime!(2020-1-1 0:00:00.00 UTC);
-    let end = datetime!(2020-1-31 23:59:59.99 UTC);
-    // returns historic quotes with daily interval
-    let resp = tokio_test::block_on(provider.get_quote_history(\"AAPL\", start, end)).unwrap();
-    let quotes = resp.quotes().unwrap();
-    println!(\"Apple's quotes in January: {:?}\", quotes);
-}
-```
-# Get the history of quotes for time range
-Another method to retrieve a range of quotes is by requesting the quotes for a given period and 
-lookup frequency. Here is an example retrieving the daily quotes for the last month:
-```rust
-use yahoo_finance_api as yahoo;
-use std::time::{Duration, UNIX_EPOCH};
-use tokio_test;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let response = tokio_test::block_on(provider.get_quote_range(\"AAPL\", \"1d\", \"1mo\")).unwrap();
-    let quotes = response.quotes().unwrap();
-    println!(\"Apple's quotes of the last month: {:?}\", quotes);
-}
-```
-
-# Search for a ticker given a search string (e.g. company name):
-```rust
-use yahoo_finance_api as yahoo;
-use tokio_test;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let resp = tokio_test::block_on(provider.search_ticker(\"Apple\")).unwrap();
-
-    let mut apple_found = false;
-    println!(\"All tickers found while searching for 'Apple':\");
-    for item in resp.quotes 
-    {
-        println!(\"{}\", item.symbol)
-    }
-}
-```
-Some fields like `longname` are only optional and will be replaced by default 
-values if missing (e.g. empty string). If you do not like this behavior, 
-use `search_ticker_opt` instead which contains `Option<String>` fields, 
-returning `None` if the field found missing in the response.
-"
-)]
-//!
-#![cfg_attr(
-    feature = "blocking",
-    doc = "
-# Get the latest available quote (with blocking feature enabled):
-```rust
-use yahoo_finance_api as yahoo;
-use std::time::{Duration, UNIX_EPOCH};
-use time::OffsetDateTime;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    // get the latest quotes in 1 minute intervals
-    let response = provider.get_latest_quotes(\"AAPL\", \"1d\").unwrap();
-    // extract just the latest valid quote summery
-    // including timestamp,open,close,high,low,volume
-    let quote = response.last_quote().unwrap();
-    let time: OffsetDateTime =
-        OffsetDateTime::from(UNIX_EPOCH + Duration::from_secs(quote.timestamp));
-    println!(\"At {} quote price of Apple was {}\", time, quote.close);
-}
-```
-# Get history of quotes for given time period:
-```rust
-use yahoo_finance_api as yahoo;
-use std::time::{Duration, UNIX_EPOCH};
-use time::{macros::datetime, OffsetDateTime};
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let start = datetime!(2020-1-1 0:00:00.00 UTC);
-    let end = datetime!(2020-1-31 23:59:59.99 UTC);
-    // returns historic quotes with daily interval
-    let resp = provider.get_quote_history(\"AAPL\", start, end).unwrap();
-    let quotes = resp.quotes().unwrap();
-    println!(\"Apple's quotes in January: {:?}\", quotes);
-}
-
-```
-# Get the history of quotes for time range
-Another method to retrieve a range of quotes is by requesting the quotes for a given period and 
-lookup frequency. Here is an example retrieving the daily quotes for the last month:
-```rust
-use yahoo_finance_api as yahoo;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let response = provider.get_quote_range(\"AAPL\", \"1d\", \"1mo\").unwrap();
-    let quotes = response.quotes().unwrap();
-    println!(\"Apple's quotes of the last month: {:?}\", quotes);
-}
-```
-# Search for a ticker given a search string (e.g. company name):
-```rust
-use yahoo_finance_api as yahoo;
-
-fn main() {
-    let provider = yahoo::YahooConnector::new();
-    let resp = provider.search_ticker(\"Apple\").unwrap();
-
-    let mut apple_found = false;
-    println!(\"All tickers found while searching for 'Apple':\");
-    for item in resp.quotes 
-    {
-        println!(\"{}\", item.symbol)
-    }
-}
-```
-"
-)]
-
 use crumb::Crumb;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use time::OffsetDateTime;
+use wreq::Emulation;
 
-#[cfg(feature = "blocking")]
-use reqwest::blocking::{Client, ClientBuilder};
-use reqwest::{
-    cookie::{CookieStore, Jar},
-    StatusCode,
-};
-#[cfg(not(feature = "blocking"))]
-use reqwest::{Client, ClientBuilder};
+use wreq::{Client, ClientBuilder, EmulationFactory};
 
 // re-export time crate
 pub use time;
@@ -232,34 +65,19 @@ pub struct YahooConnector {
 }
 
 #[derive(Default)]
-pub struct YahooConnectorBuilder<CS> {
+pub struct YahooConnectorBuilder {
     client_builder: Option<ClientBuilder>,
-    cookie_store: Option<Arc<CS>>,
-    user_agent: Option<String>,
+    emulation: Option<Emulation>,
     timeout: Option<Duration>,
 }
 
 impl YahooConnector {
     /// Constructor for a new instance of the yahoo connector.
     pub fn new() -> YahooConnector {
-        let cs = Arc::new(Jar::default());
-        let client = ClientBuilder::new()
-            .user_agent(DEFAULT_USER_AGENT_HEADER)
-            .cookie_provider(cs.clone())
-            .build()
-            .unwrap();
-
-        let crumb = Crumb::new(client.clone());
-
-        YahooConnector {
-            client,
-            crumb,
-            url: YCHART_URL,
-            search_url: YSEARCH_URL,
-        }
+        Self::builder().build().unwrap()
     }
 
-    pub fn builder() -> YahooConnectorBuilder<Jar> {
+    pub fn builder() -> YahooConnectorBuilder {
         YahooConnectorBuilder::default()
     }
 }
@@ -270,32 +88,30 @@ impl Default for YahooConnector {
     }
 }
 
-impl<CS: CookieStore + Default + 'static> YahooConnectorBuilder<CS> {
+impl YahooConnectorBuilder {
     pub fn build(self) -> Result<YahooConnector, YahooError> {
-        let mut cb = self
-            .client_builder
-            .unwrap_or_else(|| ClientBuilder::default());
+        let mut cb = self.client_builder.unwrap_or_else(Client::builder);
 
         if let Some(timeout) = self.timeout {
             cb = cb.timeout(timeout);
         }
 
-        cb = cb.user_agent(
-            self.user_agent
-                .unwrap_or_else(|| DEFAULT_USER_AGENT_HEADER.to_string()),
-        );
+        cb = cb.cookie_store(true);
 
-        if self.cookie_store.is_none() {
-            let jar = Arc::new(CS::default());
-            cb = cb.cookie_provider(jar.clone());
-        }
+        let emu = self
+            .emulation
+            .unwrap_or_else(|| wreq_util::Emulation::random().emulation());
 
-        let cl = cb.build()?;
+        cb = cb.emulation(emu);
 
-        let crumb = Crumb::new(cl.clone());
+        let client = cb
+            .build()
+            .map_err(|e| YahooError::from_wreq_while(e, "building the client"))?;
+
+        let crumb = Crumb::new(client.clone());
 
         Ok(YahooConnector {
-            client: cl,
+            client,
             crumb,
             url: YCHART_URL,
             search_url: YSEARCH_URL,
@@ -312,23 +128,39 @@ impl<CS: CookieStore + Default + 'static> YahooConnectorBuilder<CS> {
         self
     }
 
-    pub fn user_agent(mut self, user_agent: &str) -> Self {
-        self.user_agent = Some(user_agent.to_string());
+    pub fn emulation<EF: EmulationFactory>(mut self, emulation: EF) -> Self {
+        self.emulation = Some(emulation.emulation());
         self
-    }
-
-    pub fn cookie_store<C: CookieStore + 'static>(self, cs: Arc<C>) -> YahooConnectorBuilder<C> {
-        YahooConnectorBuilder {
-            client_builder: self.client_builder,
-            cookie_store: Some(cs),
-            user_agent: self.user_agent,
-            timeout: self.timeout,
-        }
     }
 }
 
-#[cfg(not(feature = "blocking"))]
 pub mod async_impl;
 
-#[cfg(feature = "blocking")]
-pub mod blocking_impl;
+#[cfg(test)]
+mod tests {
+    use crate::{quote_summary::QuoteSummaryField, YahooConnector};
+
+    #[test]
+    fn test_quote_summary_live() {
+        tokio_test::block_on(async {
+            env_logger::builder()
+                .filter_level(log::LevelFilter::Trace)
+                .init();
+
+            let c = YahooConnector::new();
+            let res = c
+                .get_quote_summary(
+                    "AAPL",
+                    &[
+                        QuoteSummaryField::EarningsTrend,
+                        QuoteSummaryField::Earnings,
+                        QuoteSummaryField::DefaultKeyStatistics,
+                    ],
+                )
+                .await;
+            assert!(res.is_ok());
+            println!("{:?}", res.unwrap());
+            panic!("just to see the output");
+        });
+    }
+}

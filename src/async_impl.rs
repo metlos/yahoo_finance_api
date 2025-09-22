@@ -1,5 +1,8 @@
+use std::convert::TryFrom as _;
+
 use super::*;
-use reqwest::Url;
+use wreq::StatusCode;
+use wreq::Uri;
 
 impl YahooConnector {
     /// Retrieve the quotes of the last day for the given ticker
@@ -92,7 +95,7 @@ impl YahooConnector {
     /// Get list for options for a given name
     pub async fn search_options(&self, name: &str) -> Result<YOptionResults, YahooError> {
         let url = format!("https://finance.yahoo.com/quote/{name}/options?p={name}");
-        let resp = self.client.get(url).send().await?.text().await?;
+        let resp = self.send_request_raw(&url).await?;
         Ok(YOptionResults::scrape(&resp))
     }
 
@@ -160,37 +163,44 @@ impl YahooConnector {
     }
 
     /// Send request to yahoo! finance server and transform response to JSON value
-    async fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
-        let mut url = Url::parse(url)
+    async fn send_request_raw(&self, url: &str) -> Result<String, YahooError> {
+        let mut url = Uri::try_from(url)
             .map_err(|e| YahooError::FetchFailed(format!("failed to parse the URL: {}", e)))?;
 
         self.crumb.enrich(&mut url).await?;
 
-        let (status, body) = if log::log_enabled!(log::Level::Trace) {
-            let resp = self.client.get(url.clone()).send().await?;
-            let status = resp.status();
-            let body = resp.text().await?;
-            log::trace!(
-                "Yahoo URL {} response status {}, body: {}",
-                url,
-                status,
-                body
-            );
-            (status, body)
-        } else {
-            let resp = self.client.get(url).send().await?;
-            let status = resp.status();
-            let body = resp.text().await?;
-            (status, body)
-        };
+        let resp = self
+            .client
+            .get(url.clone())
+            .send()
+            .await
+            .map_err(|e| YahooError::from_wreq_while(e, "getting the data"))?;
+
+        let status = resp.status();
+
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| YahooError::from_wreq_while(e, "reading the response"))?;
+
+        log::trace!(
+            "Yahoo URL {} response status {}, body: {}",
+            url,
+            status,
+            body
+        );
 
         match status {
-            StatusCode::OK => Ok(serde_json::from_str(&body)?),
+            StatusCode::OK => Ok(body),
             status => Err(YahooError::FetchFailed(format!(
                 "status {}, response: {}",
                 status, body
             ))),
         }
+    }
+
+    async fn send_request(&self, url: &str) -> Result<serde_json::Value, YahooError> {
+        Ok(serde_json::from_str(&self.send_request_raw(url).await?)?)
     }
 }
 
