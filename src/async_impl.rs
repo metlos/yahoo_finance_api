@@ -395,4 +395,5 @@ mod tests {
         let capital_gains = response.capital_gains().unwrap();
         assert!(capital_gains.len() > 0usize);
     }
+
 }

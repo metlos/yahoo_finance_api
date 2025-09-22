@@ -18,6 +18,9 @@ pub struct QuoteSummary {
     pub earnings_history: Option<EarningsHistory>,
     pub earnings_trend: Option<EarningsTrend>,
     pub price: Option<Price>,
+    pub insider_transactions: Option<InsiderTransactions>,
+    pub insider_holders: Option<InsiderHolders>,
+    pub net_share_purchase_activity: Option<NetSharePurchaseActivity>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -31,6 +34,9 @@ pub enum QuoteSummaryField {
     EarningsHistory,
     EarningsTrend,
     Price,
+    InsiderTransactions,
+    InsiderHolders,
+    NetSharePurchaseActivity,
 }
 
 impl QuoteSummaryField {
@@ -45,6 +51,9 @@ impl QuoteSummaryField {
             QuoteSummaryField::EarningsHistory => "earningsHistory",
             QuoteSummaryField::EarningsTrend => "earningsTrend",
             QuoteSummaryField::Price => "price",
+            QuoteSummaryField::InsiderTransactions => "insiderTransactions",
+            QuoteSummaryField::InsiderHolders => "insiderHolders",
+            QuoteSummaryField::NetSharePurchaseActivity => "netSharePurchaseActivity",
         }
     }
 }
@@ -52,6 +61,65 @@ impl QuoteSummaryField {
 #[serde(rename_all = "camelCase")]
 pub struct AssetProfile {
     // eh, there's just too much of this...
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InsiderTransactions {
+    pub transactions: Option<Vec<InsiderTransaction>>,
+    pub max_age: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InsiderTransaction {
+    pub start_date: Option<Formatted<usize>>,
+    pub filer_name: Option<String>,
+    pub filer_relation: Option<String>,
+    pub filer_url: Option<String>,
+    pub money_text: Option<String>,
+    pub transaction_text: Option<String>,
+    pub shares: Option<Formatted<f64>>,
+    pub value: Option<Formatted<f64>>,
+    pub ownership: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InsiderHolders {
+    pub holders: Option<Vec<InsiderHolder>>,
+    pub max_age: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InsiderHolder {
+    pub name: Option<String>,
+    pub relation: Option<String>,
+    pub url: Option<String>,
+    pub transaction_description: Option<String>,
+    pub latest_trans_date: Option<Formatted<usize>>,
+    pub position_direct: Option<Formatted<f64>>,
+    pub position_direct_date: Option<Formatted<usize>>,
+    pub position_indirect: Option<Formatted<f64>>,
+    pub position_indirect_date: Option<Formatted<usize>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NetSharePurchaseActivity {
+    pub period: Option<String>,
+    pub buy_info_shares: Option<f64>,
+    pub sell_info_shares: Option<f64>,
+    pub net_info_shares: Option<f64>,
+    pub total_insider_shares: Option<f64>,
+    pub net_percent_insider_shares: Option<f64>,
+    pub buy_percent_insider_shares: Option<f64>,
+    pub sell_percent_insider_shares: Option<f64>,
+    pub buy_info_count: Option<usize>,
+    pub sell_info_count: Option<usize>,
+    pub net_info_count: Option<i64>,
+    pub max_age: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -95,7 +163,7 @@ pub struct DefaultKeyStatistics {
     pub shares_short: Option<usize>,
     pub shares_short_previous_month_date: Option<usize>,
     pub shares_short_prior_month: Option<usize>,
-    pub shares_percent_of_float: Option<f64>,
+    pub short_percent_of_float: Option<f64>,
     pub short_ratio: Option<f64>,
     pub trailing_eps: Option<f64>,
 }
@@ -208,7 +276,7 @@ pub struct SummaryDetail {
 pub struct Earnings {
     pub max_age: Option<usize>,
     pub earnings_chart: Option<EarningsChart>,
-    pub financial_chart: Option<FinancialChart>,
+    pub financials_chart: Option<FinancialChart>,
     pub financial_currency: Option<String>,
 }
 
@@ -286,7 +354,7 @@ pub struct EarningsTrendEntry {
     pub period: Option<String>,
     pub end_date: Option<String>,
     pub growth: Option<Formatted<f64>>,
-    pub earning_estimate: Option<EarningsEstimate>,
+    pub earnings_estimate: Option<EarningsEstimate>,
     pub revenue_estimate: Option<RevenueEstimate>,
     pub eps_trend: Option<EpsTrend>,
     pub eps_revisions: Option<EpsRevisions>,
@@ -309,6 +377,7 @@ pub struct EpsRevisions {
     pub up_last_7days: Option<Formatted<f64>>,
     pub up_last_30days: Option<Formatted<f64>>,
     pub down_last_30days: Option<Formatted<f64>>,
+    pub down_last_7_days: Option<Formatted<f64>>,
     pub down_last_90days: Option<Formatted<f64>>,
 }
 
@@ -2109,5 +2178,107 @@ mod test {
         println!("{:?}", data);
 
         assert!(data.earnings_history.is_some());
+
+        let earnings = data.earnings.as_ref().unwrap();
+        assert!(earnings.financials_chart.is_some());
+
+        let trend = data.earnings_trend.as_ref().unwrap();
+        let first = &trend.trend.as_ref().unwrap()[0];
+        assert!(first.earnings_estimate.is_some());
+
+        let stats = data.default_key_statistics.as_ref().unwrap();
+        assert!(stats.short_percent_of_float.is_some());
+    }
+
+    const INSIDER_SUMMARY: &str = r#"
+    {
+        "quoteSummary": {
+            "error": null,
+            "result": [
+                {
+                    "insiderTransactions": {
+                        "maxAge": 1,
+                        "transactions": [
+                            {
+                                "filerName": "COOK TIMOTHY D",
+                                "filerRelation": "Chief Executive Officer",
+                                "filerUrl": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001214156",
+                                "maxAge": 1,
+                                "moneyText": "Purchase",
+                                "ownership": "D",
+                                "shares": {"raw": 50000.0, "fmt": "50k", "longFmt": "50,000"},
+                                "startDate": {"raw": 1700000000, "fmt": "2023-11-15"},
+                                "transactionText": "Purchase at price 189.30 per share.",
+                                "value": {"raw": 9465000.0, "fmt": "9.47M", "longFmt": "9,465,000"}
+                            },
+                            {
+                                "filerName": "MAESTRI LUCA",
+                                "filerRelation": "Chief Financial Officer",
+                                "filerUrl": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001270427",
+                                "maxAge": 1,
+                                "moneyText": "Sale",
+                                "ownership": "D",
+                                "shares": {"raw": 20000.0, "fmt": "20k", "longFmt": "20,000"},
+                                "startDate": {"raw": 1698000000, "fmt": "2023-10-22"},
+                                "transactionText": "Sale at price 171.21 per share.",
+                                "value": {"raw": 3424200.0, "fmt": "3.42M", "longFmt": "3,424,200"}
+                            },
+                            {
+                                "filerName": "WILLIAMS JEFFREY E",
+                                "filerRelation": "Chief Operating Officer",
+                                "filerUrl": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001496686",
+                                "maxAge": 1,
+                                "moneyText": "",
+                                "ownership": "D",
+                                "shares": {"raw": 10000.0, "fmt": "10k", "longFmt": "10,000"},
+                                "startDate": {"raw": 1695000000, "fmt": "2023-09-18"},
+                                "transactionText": "Conversion of Exercise of derivative security at price 48.00 per share.",
+                                "value": {"raw": 480000.0, "fmt": "480k", "longFmt": "480,000"}
+                            }
+                        ]
+                    },
+                    "netSharePurchaseActivity": {
+                        "maxAge": 1,
+                        "period": "6m",
+                        "buyInfoCount": 3,
+                        "buyInfoShares": 75000.0,
+                        "buyPercentInsiderShares": 0.0049,
+                        "netInfoCount": 1,
+                        "netInfoShares": 55000.0,
+                        "netPercentInsiderShares": 0.0036,
+                        "sellInfoCount": 2,
+                        "sellInfoShares": 20000.0,
+                        "sellPercentInsiderShares": 0.0013,
+                        "totalInsiderShares": 15300000.0
+                    }
+                }
+            ]
+        }
+    }
+    "#;
+
+    #[test]
+    fn test_insider_deserialization() {
+        let raw: serde_json::Value = serde_json::from_str(INSIDER_SUMMARY).unwrap();
+        let data = from_response(raw).unwrap();
+
+        let txns = data.insider_transactions.as_ref().unwrap();
+        let transactions = txns.transactions.as_ref().unwrap();
+        assert_eq!(transactions.len(), 3);
+
+        let ceo = &transactions[0];
+        assert_eq!(ceo.filer_name.as_deref(), Some("COOK TIMOTHY D"));
+        assert_eq!(ceo.filer_relation.as_deref(), Some("Chief Executive Officer"));
+        assert_eq!(ceo.money_text.as_deref(), Some("Purchase"));
+        assert_eq!(ceo.shares.as_ref().and_then(|s| s.raw), Some(50000.0));
+        assert_eq!(ceo.start_date.as_ref().and_then(|d| d.raw), Some(1700000000));
+
+        let exercise = &transactions[2];
+        assert!(exercise.transaction_text.as_deref().unwrap().contains("Exercise"));
+
+        let activity = data.net_share_purchase_activity.as_ref().unwrap();
+        assert_eq!(activity.period.as_deref(), Some("6m"));
+        assert_eq!(activity.buy_info_shares, Some(75000.0));
+        assert_eq!(activity.total_insider_shares, Some(15300000.0));
     }
 }

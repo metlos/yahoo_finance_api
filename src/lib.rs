@@ -143,24 +143,67 @@ mod tests {
     #[test]
     fn test_quote_summary_live() {
         tokio_test::block_on(async {
-            env_logger::builder()
-                .filter_level(log::LevelFilter::Trace)
-                .init();
-
             let c = YahooConnector::new();
-            let res = c
+            let data = c
                 .get_quote_summary(
                     "AAPL",
                     &[
-                        QuoteSummaryField::EarningsTrend,
-                        QuoteSummaryField::Earnings,
+                        QuoteSummaryField::AssetProfile,
                         QuoteSummaryField::DefaultKeyStatistics,
+                        QuoteSummaryField::FinancialData,
+                        QuoteSummaryField::QuoteType,
+                        QuoteSummaryField::SummaryDetail,
+                        QuoteSummaryField::Earnings,
+                        QuoteSummaryField::EarningsHistory,
+                        QuoteSummaryField::EarningsTrend,
+                        QuoteSummaryField::Price,
+                        QuoteSummaryField::InsiderTransactions,
+                        QuoteSummaryField::InsiderHolders,
+                        QuoteSummaryField::NetSharePurchaseActivity,
                     ],
                 )
-                .await;
-            assert!(res.is_ok());
-            println!("{:?}", res.unwrap());
-            panic!("just to see the output");
+                .await
+                .expect("get_quote_summary failed");
+
+            assert!(data.asset_profile.is_some());
+
+            let stats = data.default_key_statistics.as_ref().expect("default_key_statistics missing");
+            assert!(stats.beta.is_some());
+            assert!(stats.trailing_eps.is_some());
+            assert!(stats.short_percent_of_float.is_some());
+
+            let fin = data.financial_data.as_ref().expect("financial_data missing");
+            assert!(fin.current_price.is_some());
+            assert!(fin.recommendation_key.is_some());
+
+            let qt = data.quote_type.as_ref().expect("quote_type missing");
+            assert_eq!(qt.symbol.as_deref(), Some("AAPL"));
+
+            let sd = data.summary_detail.as_ref().expect("summary_detail missing");
+            assert!(sd.market_cap.is_some());
+
+            let earnings = data.earnings.as_ref().expect("earnings missing");
+            assert!(earnings.earnings_chart.is_some());
+            assert!(earnings.financials_chart.is_some());
+
+            let history = data.earnings_history.as_ref().expect("earnings_history missing");
+            assert!(!history.history.as_ref().unwrap().is_empty());
+
+            let trend = data.earnings_trend.as_ref().expect("earnings_trend missing");
+            let entries = trend.trend.as_ref().unwrap();
+            let first = entries.iter().find(|e| e.earnings_estimate.is_some())
+                .expect("no trend entry with earningsEstimate");
+            assert!(first.revenue_estimate.is_some());
+
+            let price = data.price.as_ref().expect("price missing");
+            assert!(price.regular_market_price.is_some());
+            assert_eq!(price.symbol.as_deref(), Some("AAPL"));
+
+            let txns = data.insider_transactions.as_ref().expect("insider_transactions missing");
+            assert!(txns.transactions.as_ref().map(|t| !t.is_empty()).unwrap_or(true));
+
+            assert!(data.insider_holders.is_some());
+            assert!(data.net_share_purchase_activity.is_some());
         });
     }
 }
